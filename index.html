@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>El Boquerón</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #efe7d4;
+    --ink: #2b2620;
+    --muted: #7d725f;
+    --gold: #8c6d34;
+    --line: rgba(140, 109, 52, .38);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    color: var(--ink);
+    font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    background: var(--bg);
+  }
+  body {
+    background:
+      radial-gradient(ellipse 80% 70% at 50% 42%, #fcfaf3 0%, #f5f0e2 52%, #e7dec7 100%);
+  }
+  /* grano muy sutil para evitar bandas en el degradado */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: .07;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  #title {
+    position: fixed; top: 20px; left: 0; right: 0;
+    text-align: center;
+    font-size: 12px; font-weight: 500;
+    letter-spacing: .42em; text-transform: uppercase;
+    color: var(--gold); opacity: .75;
+    pointer-events: none;
+  }
+
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #bookwrap {
+    position: relative;
+    transition: transform .8s cubic-bezier(.22, .75, .2, 1);
+    opacity: 0;
+  }
+  #bookwrap.show { opacity: 1; transition: transform .8s cubic-bezier(.22, .75, .2, 1), opacity .9s ease; }
+  /* sombra de apoyo bajo el libro */
+  #bookwrap::before {
+    content: "";
+    position: absolute; left: 4%; right: 4%; bottom: -22px; height: 34px;
+    background: radial-gradient(ellipse at center, rgba(70,45,10,.55) 0%, rgba(70,45,10,0) 70%);
+    filter: blur(12px);
+    pointer-events: none;
+    transition: left .8s ease, right .8s ease;
+  }
+  /* con la portada o contraportada sola, la sombra va solo bajo esa mitad */
+  #bookwrap.solo-r::before { left: 52%; right: 1%; }
+  #bookwrap.solo-l::before { left: 1%; right: 52%; }
+  #book { position: relative; }
+
+  .page {
+    background: #e9e1cd;
+    overflow: hidden;
+  }
+  .page img {
+    width: 100%; height: 100%;
+    display: block;
+    object-fit: fill;
+    opacity: 0;
+    transition: opacity .45s ease;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  .page img.ready { opacity: 1; }
+  /* sombreado del lomo en las páginas interiores */
+  .page.l::after, .page.r::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(90, 70, 30, .12);
+  }
+  .page.l::after { background: linear-gradient(to left,  rgba(0,0,0,.20), rgba(0,0,0,0) 8%); }
+  .page.r::after { background: linear-gradient(to right, rgba(0,0,0,.20), rgba(0,0,0,0) 8%); }
+
+  /* barra inferior */
+  #bar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 0 20px calc(18px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  #progress {
+    width: min(360px, 60vw); height: 1px;
+    background: rgba(43, 38, 32, .16);
+    position: relative;
+  }
+  #progress i {
+    position: absolute; left: 0; top: -.5px; height: 2px; width: 0;
+    background: var(--gold);
+    transition: width .5s ease;
+  }
+  #controls { display: flex; align-items: center; gap: 22px; }
+  button {
+    appearance: none; border: 1px solid var(--line); background: rgba(249,244,231,.75);
+    color: var(--gold);
+    width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer;
+    transition: background .25s, border-color .25s, color .25s, opacity .25s;
+    backdrop-filter: blur(6px);
+  }
+  button:hover:not(:disabled) { background: rgba(140,109,52,.12); border-color: var(--gold); }
+  button:disabled { opacity: .25; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  button svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  #counter {
+    min-width: 150px; text-align: center;
+    font-size: 19px; font-weight: 500; letter-spacing: .08em;
+    color: var(--ink);
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  #counter small { color: var(--muted); font-size: 15px; }
+  #fs { position: fixed; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); width: 38px; height: 38px; }
+
+  #hint {
+    position: fixed; left: 0; right: 0; top: 46px;
+    text-align: center; font-size: 15px; font-style: italic; color: var(--muted);
+    letter-spacing: .04em; pointer-events: none;
+    opacity: 0; transition: opacity 1s ease;
+  }
+  #hint.show { opacity: 1; }
+
+  #status {
+    position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
+    padding: 24px; font-size: 18px; letter-spacing: .12em; color: var(--muted);
+    transition: opacity .6s ease;
+  }
+  #status.hide { opacity: 0; pointer-events: none; }
+  #status b { color: var(--gold); font-weight: 500; }
+
+  @media (max-width: 640px) {
+    #counter { min-width: 110px; font-size: 17px; }
+    #fs { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #bookwrap, #progress i, .page img { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="title"></div>
+
+<div id="stage">
+  <div id="bookwrap"><div id="book"></div></div>
+</div>
+
+<div id="hint">Arrastra una esquina o usa las flechas ← →</div>
+
+<div id="bar">
+  <div id="progress"><i></i></div>
+  <div id="controls">
+    <button id="prev" aria-label="Página anterior"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div id="counter"></div>
+    <button id="next" aria-label="Página siguiente"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
+</div>
+<button id="fs" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+
+<div id="status">Cargando…</div>
+
+<script src="libs/page-flip.browser.js"></script>
+<script>
+/* ============ CONFIGURACIÓN ============ */
+const CONFIG = {
+  title: '',              // texto pequeño que aparece arriba (vacío = sin texto)
+  tabTitle: 'El Boquerón', // título de la pestaña del navegador
+  total: 44,              // nº total de páginas (portada y contraportada incluidas)
+  folder: 'paginas/',     // carpeta con las imágenes
+  ext: 'webp',            // extensión de las imágenes
+  pad: 3                  // 001.webp, 002.webp ...
+};
+/* ======================================= */
+
+const TOTAL = CONFIG.total;
+const $ = id => document.getElementById(id);
+const pageSrc = i => `${CONFIG.folder}${String(i + 1).padStart(CONFIG.pad, '0')}.${CONFIG.ext}`;
+
+document.title = CONFIG.tabTitle || CONFIG.title || 'Libro';
+$('title').textContent = CONFIG.title;
+
+const probe = new Image();
+probe.onload = () => start(probe.naturalWidth, probe.naturalHeight);
+probe.onerror = () => {
+  $('status').innerHTML = `No encuentro <b>${pageSrc(0)}</b><br><small>Genera las imágenes con convert.py y revisa CONFIG en index.html</small>`;
+};
+probe.src = pageSrc(0);
+
+function start(imgW, imgH) {
+  const ratio = imgH / imgW;
+  const bookEl = $('book'), wrap = $('bookwrap');
+
+  /* ---- páginas ---- */
+  const imgs = [];
+  const pageEls = [];
+  for (let i = 0; i < TOTAL; i++) {
+    const el = document.createElement('div');
+    el.className = 'page';
+    const hard = (i === 0 || i === TOTAL - 1);
+    if (hard) el.dataset.density = 'hard';
+    else el.classList.add(i % 2 === 1 ? 'l' : 'r');   // impares = izquierda, pares = derecha
+    const img = document.createElement('img');
+    img.alt = `Página ${i + 1}`;
+    img.draggable = false;
+    img.addEventListener('load', () => img.classList.add('ready'));
+    el.appendChild(img);
+    imgs.push(img);
+    pageEls.push(el);
+    pageEls[i] = el;
+  }
+
+  const loaded = new Set();
+  function load(i) {
+    if (i < 0 || i >= TOTAL || loaded.has(i)) return;
+    loaded.add(i);
+    imgs[i].src = pageSrc(i);
+  }
+  function loadAround(idx) { for (let k = idx - 2; k <= idx + 5; k++) load(k); }
+  // el resto se va precargando poco a poco en segundo plano
+  let bgNext = 0;
+  (function bg() {
+    while (bgNext < TOTAL && loaded.has(bgNext)) bgNext++;
+    if (bgNext < TOTAL) { load(bgNext); setTimeout(bg, 350); }
+  })();
+  loadAround(0);
+
+  /* ---- tamaño del libro según la ventana ---- */
+  const TOP = 76, BOTTOM = 104, SIDE = 24;
+  function layout() {
+    const availW = window.innerWidth - SIDE * 2;
+    const availH = window.innerHeight - TOP - BOTTOM;
+    const twoW = Math.min(availW, (2 * availH) / ratio);
+    let w, h;
+    if (twoW >= 640) {                      // doble página
+      w = twoW; h = (twoW / 2) * ratio;
+    } else {                                // una página (móviles / ventanas estrechas)
+      w = Math.min(availW, availH / ratio, 620); h = w * ratio;
+    }
+    // la librería fuerza width:100% en #book, así que el ancho se fija en el envoltorio
+    wrap.style.width = Math.floor(w) + 'px';
+    wrap.style.height = Math.floor(h) + 'px';
+    bookEl.style.height = Math.floor(h) + 'px';
+    wrap.style.marginTop = `${TOP - BOTTOM}px`;
+  }
+  layout();
+
+  /* ---- libro ---- */
+  const pf = new St.PageFlip(bookEl, {
+    width: 600,
+    height: Math.round(600 * ratio),
+    size: 'stretch',
+    minWidth: 315, maxWidth: 3000,
+    minHeight: 200, maxHeight: 4000,
+    showCover: true,
+    usePortrait: true,
+    drawShadow: true,
+    maxShadowOpacity: 0.55,
+    flippingTime: 900,
+    mobileScrollSupport: false,
+    swipeDistance: 30,
+    showPageCorners: true
+  });
+  pf.loadFromHTML(pageEls);
+
+  const prevBtn = $('prev'), nextBtn = $('next'), counter = $('counter'), bar = document.querySelector('#progress i');
+
+  function update(idx) {
+    const landscape = pf.getOrientation() === 'landscape';
+    // texto del contador
+    let label;
+    if (idx <= 0) label = 'Portada';
+    else if (idx >= TOTAL - 1) label = 'Contraportada';
+    else label = landscape ? `${idx + 1} – ${idx + 2}` : `${idx + 1}`;
+    counter.innerHTML = `${label} <small>/ ${TOTAL}</small>`;
+    // progreso y botones
+    bar.style.width = (Math.min(idx, TOTAL - 1) / (TOTAL - 1) * 100) + '%';
+    prevBtn.disabled = idx <= 0;
+    nextBtn.disabled = idx >= TOTAL - 1;
+    // carga perezosa
+    loadAround(idx);
+    // centrar portada y contraportada (la librería las deja en una mitad)
+    let shift = 0;
+    if (landscape) {
+      const q = bookEl.clientWidth / 4;
+      if (idx <= 0) shift = -q;
+      else if (idx >= TOTAL - 1) shift = q;
+    }
+    wrap.style.transform = `translateX(${shift}px)`;
+    wrap.classList.toggle('solo-r', landscape && idx <= 0);
+    wrap.classList.toggle('solo-l', landscape && idx >= TOTAL - 1);
+  }
+
+  pf.on('flip', e => update(e.data));
+  pf.on('changeOrientation', () => update(pf.getCurrentPageIndex()));
+
+  prevBtn.addEventListener('click', () => pf.flipPrev());
+  nextBtn.addEventListener('click', () => pf.flipNext());
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); pf.flipNext(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); pf.flipPrev(); }
+    else if (e.key === 'Home') { pf.turnToPage(0); update(0); }
+    else if (e.key === 'End') { pf.turnToPage(TOTAL - 1); update(pf.getCurrentPageIndex()); }
+    else if (e.key === 'f' || e.key === 'F') toggleFs();
+  });
+
+  /* ---- pantalla completa ---- */
+  const fsBtn = $('fs');
+  const canFs = document.documentElement.requestFullscreen;
+  if (!canFs) fsBtn.style.display = 'none';
+  function toggleFs() {
+    if (!canFs) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
+  fsBtn.addEventListener('click', toggleFs);
+
+  /* ---- redimensionar ---- */
+  let rt;
+  window.addEventListener('resize', () => {
+    layout();
+    pf.update();
+    clearTimeout(rt);
+    rt = setTimeout(() => update(pf.getCurrentPageIndex()), 120);
+  });
+
+  /* ---- entrada ---- */
+  update(0);
+  $('status').classList.add('hide');
+  requestAnimationFrame(() => wrap.classList.add('show'));
+  setTimeout(() => $('hint').classList.add('show'), 1400);
+  setTimeout(() => $('hint').classList.remove('show'), 7000);
+  pf.on('flip', () => $('hint').classList.remove('show'));
+}
+</script>
+</body>
+</html>
